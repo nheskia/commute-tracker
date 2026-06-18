@@ -235,6 +235,14 @@ let state = {
 
 // ─── Init ─────────────────────────────────────────────────────
 window.addEventListener('load', () => {
+  // Pedir GPS inmediatamente al cargar
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      () => {}, 
+      () => {},
+      { enableHighAccuracy: true }
+    );
+  }
   if (state.scriptUrl) {
     document.getElementById('headerStatus').textContent = '✓ Conectado';
     document.getElementById('headerStatus').style.color = 'var(--green)';
