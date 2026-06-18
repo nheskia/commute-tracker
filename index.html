@@ -191,6 +191,12 @@
         <div id="savedRoutesList" style="font-size:13px; color:var(--muted)">Ninguna aún</div>
         <button class="save-btn" style="background:var(--surface2); color:var(--accent); margin-top:12px;" onclick="clearRoutes()">Borrar rutas guardadas</button>
       </div>
+
+      <div class="settings-item" style="margin-top:0">
+        <label>Historial de viajes</label>
+        <div style="font-size:13px; color:var(--muted); margin-bottom:12px" id="tripCount">Cargando...</div>
+        <button class="save-btn" style="background:var(--surface2); color:var(--accent);" onclick="clearTrips()">Borrar historial de viajes</button>
+      </div>
     </div>
 
   </div>
@@ -235,14 +241,6 @@ let state = {
 
 // ─── Init ─────────────────────────────────────────────────────
 window.addEventListener('load', () => {
-  // Pedir GPS inmediatamente al cargar
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      () => {}, 
-      () => {},
-      { enableHighAccuracy: true }
-    );
-  }
   if (state.scriptUrl) {
     document.getElementById('headerStatus').textContent = '✓ Conectado';
     document.getElementById('headerStatus').style.color = 'var(--green)';
@@ -389,12 +387,28 @@ function renderSavedRoutes() {
   el.innerHTML = state.routes.map(r => `<div style="margin-bottom:4px">• ${r}</div>`).join('');
 }
 
+function deleteTrip(id) {
+  state.trips = state.trips.filter(t => t.id !== id);
+  localStorage.setItem('trips', JSON.stringify(state.trips));
+  const el = document.getElementById('trip-' + id);
+  if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => renderHistory(), 300); }
+  showToast('Viaje eliminado', 'success');
+}
+
 function clearRoutes() {
   state.routes = [];
   localStorage.setItem('savedRoutes', '[]');
   renderRouteChips();
   renderSavedRoutes();
   showToast('Rutas borradas', 'success');
+}
+
+function clearTrips() {
+  if (!confirm(`¿Borrar los ${state.trips.length} viajes del historial local? Esto no borra los datos en Google Sheets.`)) return;
+  state.trips = [];
+  localStorage.setItem('trips', '[]');
+  renderSavedRoutes();
+  showToast('Historial borrado', 'success');
 }
 
 // ─── Save to Sheets ───────────────────────────────────────────
@@ -436,13 +450,14 @@ function renderHistory() {
     const date = new Date(t.startTime);
     const dateStr = date.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' });
     const timeStr = date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
-    return `<div class="trip-card">
+    return `<div class="trip-card" id="trip-${t.id}">
       <div class="trip-arrow">${emoji}</div>
       <div class="trip-info">
         <div class="trip-route">${t.route}</div>
         <div class="trip-meta">${dateStr} · ${timeStr}</div>
       </div>
       <div class="trip-dur">${Math.floor(dur)}<span>m ${Math.round((dur % 1) * 60)}s</span></div>
+      <button onclick="deleteTrip('${t.id}')" style="background:none;border:none;padding:8px;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;flex-shrink:0;">🗑️</button>
     </div>`;
   }).join('');
   el.innerHTML = html;
