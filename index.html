@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0f0f1a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Commute">
+<title>Commute Tracker</title>
+<link rel="manifest" href="manifest.json">
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --surface: #1a1a2e;
+    --surface2: #16213e;
+    --accent: #e94560;
+    --accent2: #0f3460;
+    --green: #00d2a0;
+    --amber: #f5a623;
+    --text: #f0f0f0;
+    --muted: #8892a4;
+    --border: rgba(255,255,255,0.08);
+    --radius: 16px;
+    --font: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); overscroll-behavior: none; }
+
+  /* Layout */
+  .app { display: flex; flex-direction: column; height: 100dvh; max-width: 430px; margin: 0 auto; position: relative; }
+  .header { padding: 56px 24px 20px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .header-title { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  .header-title span { color: var(--accent); }
+  .content { flex: 1; overflow-y: auto; padding: 0 16px 100px; -webkit-overflow-scrolling: touch; }
+  .nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; background: rgba(15,15,26,0.95); backdrop-filter: blur(20px); border-top: 1px solid var(--border); display: flex; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 0); }
+  .nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; color: var(--muted); font-size: 11px; cursor: pointer; transition: color 0.2s; border: none; background: none; }
+  .nav-btn.active { color: var(--accent); }
+  .nav-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Screens */
+  .screen { display: none; padding-top: 20px; }
+  .screen.active { display: block; }
+
+  /* Timer screen */
+  .config-card { background: var(--surface); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; border: 1px solid var(--border); }
+  .config-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
+  .toggle-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .toggle-btn { padding: 12px; border-radius: 10px; border: 1.5px solid var(--border); background: transparent; color: var(--muted); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; text-align: center; }
+  .toggle-btn.active { border-color: var(--accent); color: var(--text); background: rgba(233,69,96,0.12); }
+  .route-input { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 16px; color: var(--text); font-size: 15px; font-family: var(--font); }
+  .route-input:focus { outline: none; border-color: var(--accent); }
+  .route-input::placeholder { color: var(--muted); }
+  .route-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .route-chip { padding: 6px 14px; border-radius: 20px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); font-size: 13px; cursor: pointer; transition: all 0.2s; }
+  .route-chip.saved { border-color: rgba(0,210,160,0.4); color: var(--green); }
+
+  /* Big timer */
+  .timer-display { text-align: center; padding: 32px 0 28px; }
+  .timer-time { font-size: 72px; font-weight: 800; letter-spacing: -4px; font-variant-numeric: tabular-nums; line-height: 1; }
+  .timer-time.running { color: var(--green); }
+  .timer-meta { font-size: 13px; color: var(--muted); margin-top: 8px; min-height: 20px; }
+  .timer-gps { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; margin-top: 8px; }
+  .gps-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .gps-dot.ok { background: var(--green); animation: pulse 2s infinite; }
+  .gps-dot.err { background: var(--accent); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  .start-btn { display: block; width: calc(100% - 32px); margin: 0 auto 16px; padding: 20px; border-radius: var(--radius); border: none; font-size: 20px; font-weight: 700; cursor: pointer; transition: all 0.2s; letter-spacing: 0.3px; font-family: var(--font); }
+  .start-btn.idle { background: var(--accent); color: #fff; }
+  .start-btn.idle:active { transform: scale(0.97); background: #d63850; }
+  .start-btn.running { background: var(--surface); border: 2px solid var(--green); color: var(--green); }
+  .start-btn.running:active { transform: scale(0.97); }
+
+  /* Toast */
+  .toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%) translateY(-20px); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 20px; font-size: 14px; opacity: 0; transition: all 0.3s; z-index: 200; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: rgba(0,210,160,0.5); color: var(--green); }
+  .toast.error { border-color: rgba(233,69,96,0.5); color: var(--accent); }
+
+  /* History screen */
+  .section-title { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 20px 0 10px; }
+  .trip-card { background: var(--surface); border-radius: 12px; padding: 16px; margin-bottom: 10px; border: 1px solid var(--border); display: flex; align-items: center; gap: 14px; }
+  .trip-arrow { font-size: 20px; flex-shrink: 0; }
+  .trip-info { flex: 1; min-width: 0; }
+  .trip-route { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trip-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .trip-dur { font-size: 22px; font-weight: 700; flex-shrink: 0; }
+  .trip-dur span { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 15px; }
+  .empty-state .big { font-size: 48px; margin-bottom: 12px; }
+
+  /* Dashboard screen */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: var(--surface); border-radius: var(--radius); padding: 18px; border: 1px solid var(--border); }
+  .stat-val { font-size: 32px; font-weight: 800; letter-spacing: -1px; }
+  .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .best-card { background: var(--surface); border-radius: var(--radius); padding: 20px; margin-bottom: 12px; border: 1px solid var(--border); }
+  .best-dir { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
+  .best-time { font-size: 28px; font-weight: 800; color: var(--green); letter-spacing: -1px; }
+  .best-time span { font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 4px; }
+  .best-detail { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .best-detail strong { color: var(--text); }
+  .chart-bar-wrap { margin-bottom: 8px; }
+  .chart-bar-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .chart-bar-track { background: var(--surface2); border-radius: 4px; height: 8px; overflow: hidden; }
+  .chart-bar-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width 0.6s ease; }
+  .chart-bar-fill.best { background: var(--green); }
+  .no-data { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 14px; background: var(--surface); border-radius: var(--radius); }
+
+  /* Settings */
+  .settings-item { background: var(--surface); border-radius: 12px; padding: 18px; margin-bottom: 10px; border: 1px solid var(--border); }
+  .settings-item label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.6px; }
+  .settings-input { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 14px; font-family: var(--font); }
+  .settings-input:focus { outline: none; border-color: var(--accent); }
+  .save-btn { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 14px; width: 100%; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 8px; font-family: var(--font); }
+  .n-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(245,166,35,0.15); border: 1px solid rgba(245,166,35,0.3); border-radius: 8px; padding: 8px 14px; font-size: 13px; color: var(--amber); margin-bottom: 16px; }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="header-title">Commute <span>Tracker</span></div>
+    <div id="headerStatus" style="font-size:12px; color:var(--muted)">Sin configurar</div>
+  </div>
+
+  <div class="content">
+
+    <!-- ── TIMER ── -->
+    <div id="screen-timer" class="screen active">
+
+      <div class="config-card">
+        <div class="config-label">Dirección</div>
+        <div class="toggle-group">
+          <button class="toggle-btn active" id="dir-to" onclick="setDirection('Casa → Trabajo')">🏠 → 🏢 Trabajo</button>
+          <button class="toggle-btn" id="dir-from" onclick="setDirection('Trabajo → Casa')">🏢 → 🏠 Casa</button>
+        </div>
+      </div>
+
+      <div class="config-card">
+        <div class="config-label">Ruta</div>
+        <input class="route-input" id="routeInput" type="text" placeholder="Ej: Kennedy directa, por Américo Vespucio..." autocomplete="off">
+        <div class="route-chips" id="routeChips"></div>
+      </div>
+
+      <div class="timer-display">
+        <div class="timer-time" id="timerDisplay">00:00</div>
+        <div class="timer-meta" id="timerMeta">Listo para salir</div>
+        <div class="timer-gps">
+          <div class="gps-dot" id="gpsDot"></div>
+          <span id="gpsLabel" style="color:var(--muted)">GPS esperando permiso</span>
+        </div>
+      </div>
+
+      <button class="start-btn idle" id="startBtn" onclick="toggleTimer()">Salir ahora</button>
+
+    </div>
+
+    <!-- ── HISTORIAL ── -->
+    <div id="screen-history" class="screen">
+      <div id="tripsList"></div>
+    </div>
+
+    <!-- ── DASHBOARD ── -->
+    <div id="screen-dashboard" class="screen">
+      <div id="dashContent"></div>
+    </div>
+
+    <!-- ── AJUSTES ── -->
+    <div id="screen-settings" class="screen">
+      <div class="section-title">Conexión</div>
+      <div class="settings-item">
+        <label>URL de tu Google Apps Script</label>
+        <input class="settings-input" id="scriptUrl" type="url" placeholder="https://script.google.com/macros/s/...">
+      </div>
+      <button class="save-btn" onclick="saveSettings()">Guardar</button>
+
+      <div class="section-title" style="margin-top:20px">Info</div>
+      <div class="settings-item" style="font-size:13px; color:var(--muted); line-height:1.6">
+        <strong style="color:var(--text)">¿Cómo instalar?</strong><br><br>
+        1. Abre esta página en Chrome (Android)<br>
+        2. Menú ⋮ → "Agregar a pantalla de inicio"<br>
+        3. Listo — funciona como app nativa<br><br>
+        <strong style="color:var(--text)">GPS</strong><br>
+        Acepta el permiso de ubicación la primera vez que lo pida. Se usa solo para registrar coordenadas al inicio/fin del viaje.
+      </div>
+      <div class="settings-item" style="margin-top:0">
+        <label>Rutas guardadas</label>
+        <div id="savedRoutesList" style="font-size:13px; color:var(--muted)">Ninguna aún</div>
+        <button class="save-btn" style="background:var(--surface2); color:var(--accent); margin-top:12px;" onclick="clearRoutes()">Borrar rutas guardadas</button>
+      </div>
+    </div>
+
+  </div>
+
+  <nav class="nav">
+    <button class="nav-btn active" data-screen="timer" onclick="showScreen('timer', this)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+      Viaje
+    </button>
+    <button class="nav-btn" data-screen="history" onclick="showScreen('history', this)">
+      <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+      Historial
+    </button>
+    <button class="nav-btn" data-screen="dashboard" onclick="showScreen('dashboard', this)">
+      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Análisis
+    </button>
+    <button class="nav-btn" data-screen="settings" onclick="showScreen('settings', this)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Ajustes
+    </button>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────
+let state = {
+  running: false,
+  startTime: null,
+  direction: 'Casa → Trabajo',
+  route: '',
+  startCoords: null,
+  endCoords: null,
+  gpsOk: false,
+  timerInterval: null,
+  scriptUrl: localStorage.getItem('scriptUrl') || '',
+  trips: JSON.parse(localStorage.getItem('trips') || '[]'),
+  routes: JSON.parse(localStorage.getItem('savedRoutes') || '[]')
+};
+
+// ─── Init ─────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  if (state.scriptUrl) {
+    document.getElementById('headerStatus').textContent = '✓ Conectado';
+    document.getElementById('headerStatus').style.color = 'var(--green)';
+    document.getElementById('scriptUrl').value = state.scriptUrl;
+  }
+  initGPS();
+  renderRouteChips();
+  renderSavedRoutes();
+});
+
+// ─── GPS ──────────────────────────────────────────────────────
+function initGPS() {
+  if (!navigator.geolocation) {
+    setGPSStatus('err', 'GPS no disponible');
+    return;
+  }
+  navigator.geolocation.watchPosition(
+    pos => {
+      state.currentCoords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      state.gpsOk = true;
+      setGPSStatus('ok', `GPS activo (±${Math.round(pos.coords.accuracy)}m)`);
+    },
+    err => {
+      state.gpsOk = false;
+      setGPSStatus('err', err.code === 1 ? 'GPS sin permiso' : 'GPS error');
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+  );
+}
+
+function setGPSStatus(status, text) {
+  const dot = document.getElementById('gpsDot');
+  const label = document.getElementById('gpsLabel');
+  dot.className = 'gps-dot ' + status;
+  label.textContent = text;
+  label.style.color = status === 'ok' ? 'var(--green)' : status === 'err' ? 'var(--accent)' : 'var(--muted)';
+}
+
+// ─── Direction ────────────────────────────────────────────────
+function setDirection(dir) {
+  state.direction = dir;
+  document.getElementById('dir-to').classList.toggle('active', dir === 'Casa → Trabajo');
+  document.getElementById('dir-from').classList.toggle('active', dir === 'Trabajo → Casa');
+}
+
+// ─── Timer ────────────────────────────────────────────────────
+function toggleTimer() {
+  if (!state.running) startTrip();
+  else stopTrip();
+}
+
+function startTrip() {
+  const route = document.getElementById('routeInput').value.trim();
+  state.route = route || 'Sin nombre';
+  state.startTime = Date.now();
+  state.startCoords = state.currentCoords ? { ...state.currentCoords } : null;
+  state.running = true;
+
+  const btn = document.getElementById('startBtn');
+  btn.textContent = 'Llegué — parar';
+  btn.className = 'start-btn running';
+
+  document.getElementById('timerMeta').textContent =
+    `Salida: ${new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} · ${state.direction}`;
+
+  state.timerInterval = setInterval(updateTimerDisplay, 1000);
+
+  // Guardar ruta si es nueva
+  if (route && !state.routes.includes(route)) {
+    state.routes.push(route);
+    if (state.routes.length > 10) state.routes.shift();
+    localStorage.setItem('savedRoutes', JSON.stringify(state.routes));
+    renderRouteChips();
+  }
+}
+
+function stopTrip() {
+  clearInterval(state.timerInterval);
+  state.running = false;
+  state.endCoords = state.currentCoords ? { ...state.currentCoords } : null;
+
+  const endTime = Date.now();
+  const durationMs = endTime - state.startTime;
+
+  const trip = {
+    id: 'L' + Date.now(),
+    direction: state.direction,
+    route: state.route,
+    startTime: state.startTime,
+    endTime,
+    durationMs,
+    startLat: state.startCoords?.lat,
+    startLon: state.startCoords?.lon,
+    endLat: state.endCoords?.lat,
+    endLon: state.endCoords?.lon
+  };
+
+  state.trips.unshift(trip);
+  localStorage.setItem('trips', JSON.stringify(state.trips.slice(0, 200)));
+
+  const btn = document.getElementById('startBtn');
+  btn.textContent = 'Salir ahora';
+  btn.className = 'start-btn idle';
+  document.getElementById('timerDisplay').textContent = '00:00';
+  document.getElementById('timerDisplay').className = 'timer-time';
+  document.getElementById('timerMeta').textContent = `Viaje guardado: ${formatDuration(durationMs)}`;
+
+  saveToSheets(trip);
+
+  if (document.getElementById('screen-history').classList.contains('active')) renderHistory();
+}
+
+function updateTimerDisplay() {
+  if (!state.startTime) return;
+  const ms = Date.now() - state.startTime;
+  document.getElementById('timerDisplay').textContent = formatDuration(ms);
+  document.getElementById('timerDisplay').className = 'timer-time running';
+}
+
+function formatDuration(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}:${String(m % 60).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
+}
+
+// ─── Route chips ──────────────────────────────────────────────
+function renderRouteChips() {
+  const container = document.getElementById('routeChips');
+  if (!state.routes.length) { container.innerHTML = ''; return; }
+  container.innerHTML = state.routes.slice(-5).reverse().map(r =>
+    `<div class="route-chip saved" onclick="selectRoute('${r.replace(/'/g,"\\'")}')">↩ ${r}</div>`
+  ).join('');
+}
+
+function selectRoute(r) {
+  document.getElementById('routeInput').value = r;
+}
+
+function renderSavedRoutes() {
+  const el = document.getElementById('savedRoutesList');
+  if (!state.routes.length) { el.textContent = 'Ninguna aún'; return; }
+  el.innerHTML = state.routes.map(r => `<div style="margin-bottom:4px">• ${r}</div>`).join('');
+}
+
+function clearRoutes() {
+  state.routes = [];
+  localStorage.setItem('savedRoutes', '[]');
+  renderRouteChips();
+  renderSavedRoutes();
+  showToast('Rutas borradas', 'success');
+}
+
+// ─── Save to Sheets ───────────────────────────────────────────
+async function saveToSheets(trip) {
+  if (!state.scriptUrl) return;
+  try {
+    const res = await fetch(state.scriptUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'save_trip', trip })
+    });
+    showToast('✓ Guardado en Google Sheets', 'success');
+  } catch (e) {
+    showToast('Solo local — sin conexión', 'error');
+  }
+}
+
+// ─── History ──────────────────────────────────────────────────
+function renderHistory() {
+  const el = document.getElementById('tripsList');
+  if (!state.trips.length) {
+    el.innerHTML = `<div class="empty-state"><div class="big">🚗</div>Aún no has registrado viajes.<br>Presiona "Salir ahora" para empezar.</div>`;
+    return;
+  }
+  const n = state.trips.length;
+  const minN = 30;
+  let html = '';
+  if (n < minN) {
+    html += `<div class="n-badge">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Muestra: ${n} / ${minN} viajes mínimos para análisis confiable
+    </div>`;
+  }
+  html += '<div class="section-title">Viajes recientes</div>';
+  html += state.trips.slice(0, 50).map(t => {
+    const dur = Math.round(t.durationMs / 60000 * 10) / 10;
+    const emoji = t.direction === 'Casa → Trabajo' ? '🏠→🏢' : '🏢→🏠';
+    const date = new Date(t.startTime);
+    const dateStr = date.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' });
+    const timeStr = date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+    return `<div class="trip-card">
+      <div class="trip-arrow">${emoji}</div>
+      <div class="trip-info">
+        <div class="trip-route">${t.route}</div>
+        <div class="trip-meta">${dateStr} · ${timeStr}</div>
+      </div>
+      <div class="trip-dur">${Math.floor(dur)}<span>m ${Math.round((dur % 1) * 60)}s</span></div>
+    </div>`;
+  }).join('');
+  el.innerHTML = html;
+}
+
+// ─── Dashboard ────────────────────────────────────────────────
+function renderDashboard() {
+  const el = document.getElementById('dashContent');
+  const trips = state.trips;
+  if (trips.length === 0) {
+    el.innerHTML = `<div class="no-data">📊 Aún no hay datos.<br><br>Registra tus primeros viajes y aquí verás el análisis automático.</div>`;
+    return;
+  }
+
+  const total = trips.length;
+  const avgDur = trips.reduce((a,t) => a + t.durationMs, 0) / total / 60000;
+  const minDur = Math.min(...trips.map(t => t.durationMs / 60000));
+  const maxDur = Math.max(...trips.map(t => t.durationMs / 60000));
+
+  // Analizar por bloques de 15 min
+  const buckets = {};
+  trips.forEach(t => {
+    const d = new Date(t.startTime);
+    const h = d.getHours(), m = d.getMinutes();
+    const block = `${String(h).padStart(2,'0')}:${m < 15 ? '00' : m < 30 ? '15' : m < 45 ? '30' : '45'}`;
+    const key = `${t.direction}|${block}|${t.route}`;
+    if (!buckets[key]) buckets[key] = { total: 0, count: 0, dir: t.direction, block, route: t.route };
+    buckets[key].total += t.durationMs / 60000;
+    buckets[key].count++;
+  });
+
+  const results = Object.values(buckets).map(b => ({
+    dir: b.dir, block: b.block, route: b.route,
+    avg: Math.round(b.total / b.count * 10) / 10, n: b.count
+  })).sort((a,b) => a.avg - b.avg);
+
+  const withMinN = results.filter(r => r.n >= 2);
+
+  let html = `
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-val">${total}</div><div class="stat-label">Viajes totales</div></div>
+      <div class="stat-card"><div class="stat-val">${Math.round(avgDur)}<small style="font-size:16px;font-weight:400"> min</small></div><div class="stat-label">Promedio</div></div>
+      <div class="stat-card"><div class="stat-val" style="color:var(--green)">${Math.round(minDur)}<small style="font-size:16px;font-weight:400"> min</small></div><div class="stat-label">Mejor viaje</div></div>
+      <div class="stat-card"><div class="stat-val" style="color:var(--accent)">${Math.round(maxDur)}<small style="font-size:16px;font-weight:400"> min</small></div><div class="stat-label">Peor viaje</div></div>
+    </div>`;
+
+  if (withMinN.length === 0) {
+    const needed = Math.max(0, 2 - Math.min(...Object.values(buckets).map(b => b.count)));
+    html += `<div class="no-data">Registra ${needed > 0 ? 'más' : 'al menos 2'} viajes por horario/ruta para ver el análisis óptimo.</div>`;
+  } else {
+    // Best por dirección
+    ['Casa → Trabajo', 'Trabajo → Casa'].forEach(dir => {
+      const forDir = withMinN.filter(r => r.dir === dir);
+      if (!forDir.length) return;
+      const best = forDir[0];
+      const worst = forDir[forDir.length - 1];
+      const maxVal = worst.avg;
+
+      html += `<div class="best-card">
+        <div class="best-dir">${dir === 'Casa → Trabajo' ? '🏠 → 🏢' : '🏢 → 🏠'} ${dir}</div>
+        <div class="best-time">${best.avg} min<span>promedio</span></div>
+        <div class="best-detail">Salir a las <strong>${best.block}</strong> por <strong>${best.route}</strong> · ${best.n} muestras</div>
+        <div style="margin-top:16px">`;
+
+      forDir.slice(0, 6).forEach((r, i) => {
+        const pct = Math.round((r.avg / maxVal) * 100);
+        html += `<div class="chart-bar-wrap">
+          <div class="chart-bar-label"><span>${r.block} · ${r.route}</span><span style="color:${i===0?'var(--green)':'var(--muted)'}">${r.avg}m · ${r.n} viajes</span></div>
+          <div class="chart-bar-track"><div class="chart-bar-fill ${i===0?'best':''}" style="width:${pct}%"></div></div>
+        </div>`;
+      });
+
+      html += `</div></div>`;
+    });
+  }
+
+  el.innerHTML = html;
+}
+
+// ─── Navigation ───────────────────────────────────────────────
+function showScreen(name, btn) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'history') renderHistory();
+  if (name === 'dashboard') renderDashboard();
+  if (name === 'settings') renderSavedRoutes();
+}
+
+// ─── Settings ─────────────────────────────────────────────────
+function saveSettings() {
+  const url = document.getElementById('scriptUrl').value.trim();
+  if (!url || !url.startsWith('https://script.google.com')) {
+    showToast('URL inválida', 'error'); return;
+  }
+  state.scriptUrl = url;
+  localStorage.setItem('scriptUrl', url);
+  document.getElementById('headerStatus').textContent = '✓ Conectado';
+  document.getElementById('headerStatus').style.color = 'var(--green)';
+  showToast('Configuración guardada', 'success');
+}
+
+// ─── Toast ────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast'; }, 2800);
+}
+
+// ─── Service Worker ───────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
