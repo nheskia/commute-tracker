@@ -1,4 +1,4 @@
-const CACHE = 'commute-v1';
+const CACHE = 'commute-v2';
 const ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
