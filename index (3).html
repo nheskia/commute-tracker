@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e14">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Commute">
+<title>Commute Tracker</title>
+<link rel="manifest" href="manifest.json">
+<style>
+  :root {
+    --bg: #0a0e14; --surface: #12171f; --surface2: #1a212b; --surface3: #232c38;
+    --accent: #ff5a5f; --teal: #2dd4bf; --amber: #fbbf24; --violet: #a78bfa;
+    --text: #eef2f6; --muted: #7d8a9a; --muted2: #4d5866;
+    --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.12);
+    --radius: 18px; --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); overscroll-behavior: none; -webkit-font-smoothing: antialiased; }
+  .app { display: flex; flex-direction: column; height: 100dvh; max-width: 460px; margin: 0 auto; position: relative; }
+  .header { padding: calc(env(safe-area-inset-top, 12px) + 18px) 22px 16px; display: flex; align-items: center; justify-content: space-between; }
+  .header-title { font-size: 19px; font-weight: 750; letter-spacing: -0.4px; }
+  .header-title span { color: var(--accent); }
+  .header-status { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted2); }
+  .status-dot.ok { background: var(--teal); }
+  .content { flex: 1; overflow-y: auto; padding: 0 16px calc(env(safe-area-inset-bottom, 0px) + 96px); -webkit-overflow-scrolling: touch; }
+  .nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 460px; background: rgba(10,14,20,0.88); backdrop-filter: blur(24px) saturate(150%); -webkit-backdrop-filter: blur(24px) saturate(150%); border-top: 1px solid var(--border); display: flex; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 0); }
+  .nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 11px 8px 9px; color: var(--muted2); font-size: 10.5px; font-weight: 500; cursor: pointer; border: none; background: none; transition: color 0.2s; }
+  .nav-btn.active { color: var(--accent); }
+  .nav-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .screen { display: none; animation: fade 0.3s ease; }
+  .screen.active { display: block; padding-top: 8px; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .smart-banner { background: linear-gradient(135deg, rgba(45,212,191,0.12), rgba(167,139,250,0.08)); border: 1px solid rgba(45,212,191,0.25); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px; display: flex; gap: 13px; align-items: flex-start; }
+  .smart-banner .icon { font-size: 22px; flex-shrink: 0; line-height: 1.2; }
+  .smart-banner .txt { font-size: 13.5px; line-height: 1.5; color: var(--text); }
+  .smart-banner .txt strong { color: var(--teal); font-weight: 650; }
+  .smart-banner .txt .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .config-card { background: var(--surface); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; border: 1px solid var(--border); }
+  .config-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; font-weight: 600; }
+  .toggle-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .toggle-btn { padding: 13px 10px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface2); color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; text-align: center; font-family: var(--font); }
+  .toggle-btn.active { border-color: var(--accent); color: var(--text); background: rgba(255,90,95,0.13); }
+  .route-input { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 12px; padding: 13px 16px; color: var(--text); font-size: 15px; font-family: var(--font); }
+  .route-input:focus { outline: none; border-color: var(--accent); }
+  .route-input::placeholder { color: var(--muted2); }
+  .route-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+  .route-chip { padding: 7px 14px; border-radius: 20px; background: var(--surface2); border: 1px solid var(--border2); color: var(--muted); font-size: 13px; cursor: pointer; transition: all 0.15s; font-weight: 500; }
+  .route-chip:active { transform: scale(0.95); }
+  .route-chip.saved { border-color: rgba(45,212,191,0.35); color: var(--teal); }
+  .dest-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .dest-chip { padding: 11px 16px; border-radius: 12px; background: var(--surface2); border: 1.5px solid var(--border); color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.18s; font-family: var(--font); display: flex; align-items: center; gap: 8px; }
+  .dest-chip.active { border-color: var(--accent); color: var(--text); background: rgba(255,90,95,0.13); }
+  .dest-chip.add { border-style: dashed; color: var(--muted); }
+  .dest-del { color: var(--muted2); font-size: 16px; line-height: 1; margin-left: 2px; padding: 0 2px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 400; display: none; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(4px); }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--radius); padding: 22px; width: 100%; max-width: 360px; }
+  .modal h3 { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+  .modal p { font-size: 13px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+  .modal-actions { display: flex; gap: 9px; margin-top: 16px; }
+  .modal-btn { flex: 1; padding: 12px; border-radius: 11px; border: none; font-size: 14px; font-weight: 650; cursor: pointer; font-family: var(--font); }
+  .modal-btn.primary { background: var(--accent); color: #fff; }
+  .modal-btn.ghost { background: var(--surface2); color: var(--muted); }
+  .timer-display { text-align: center; padding: 30px 0 22px; }
+  .timer-time { font-size: 78px; font-weight: 800; letter-spacing: -4px; font-variant-numeric: tabular-nums; line-height: 0.95; font-family: var(--mono); transition: color 0.3s; }
+  .timer-time.running { color: var(--teal); }
+  .timer-meta { font-size: 13px; color: var(--muted); margin-top: 12px; min-height: 18px; }
+  .timer-live { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--teal); font-weight: 600; opacity: 0; transition: opacity 0.3s; }
+  .timer-live.show { opacity: 1; }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); animation: blink 1.4s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .start-btn { display: block; width: 100%; padding: 21px; border-radius: var(--radius); border: none; font-size: 20px; font-weight: 750; cursor: pointer; transition: transform 0.12s, background 0.2s; letter-spacing: 0.2px; font-family: var(--font); }
+  .start-btn.idle { background: var(--accent); color: #fff; box-shadow: 0 8px 24px rgba(255,90,95,0.3); }
+  .start-btn.idle:active { transform: scale(0.97); }
+  .start-btn.running { background: var(--surface); border: 2px solid var(--teal); color: var(--teal); }
+  .start-btn.running:active { transform: scale(0.97); }
+  .toast { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 70px); left: 50%; transform: translateX(-50%) translateY(-16px); background: var(--surface3); border: 1px solid var(--border2); border-radius: 13px; padding: 12px 20px; font-size: 14px; font-weight: 500; opacity: 0; transition: all 0.3s; z-index: 300; white-space: nowrap; box-shadow: 0 12px 32px rgba(0,0,0,0.4); }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.success { color: var(--teal); }
+  .toast.error { color: var(--accent); }
+  .section-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; padding: 22px 4px 11px; font-weight: 600; }
+  .trip-card { background: var(--surface); border-radius: 14px; padding: 14px 16px; margin-bottom: 9px; border: 1px solid var(--border); display: flex; align-items: center; gap: 13px; transition: opacity 0.3s, transform 0.2s; }
+  .trip-card.outlier { border-color: rgba(251,191,36,0.3); }
+  .trip-arrow { font-size: 18px; flex-shrink: 0; }
+  .trip-info { flex: 1; min-width: 0; }
+  .trip-route { font-size: 15px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trip-meta { font-size: 11.5px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .trip-flag { font-size: 10px; background: rgba(251,191,36,0.18); color: var(--amber); padding: 2px 7px; border-radius: 6px; font-weight: 600; }
+  .trip-dur { font-size: 21px; font-weight: 750; flex-shrink: 0; font-family: var(--mono); }
+  .trip-dur span { font-size: 11px; font-weight: 400; color: var(--muted); }
+  .trip-del { background: none; border: none; padding: 7px; cursor: pointer; color: var(--muted2); flex-shrink: 0; display: flex; align-items: center; transition: color 0.2s; }
+  .trip-del:active { color: var(--accent); }
+  .trip-del svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .empty-state { text-align: center; padding: 70px 24px; color: var(--muted); font-size: 15px; line-height: 1.6; }
+  .empty-state .big { font-size: 52px; margin-bottom: 14px; }
+  .n-badge { display: flex; align-items: center; gap: 9px; background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.25); border-radius: 13px; padding: 12px 15px; font-size: 13px; color: var(--amber); margin-bottom: 8px; line-height: 1.4; }
+  .n-badge svg { flex-shrink: 0; }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; margin-bottom: 8px; }
+  .stat-card { background: var(--surface); border-radius: 15px; padding: 16px 18px; border: 1px solid var(--border); }
+  .stat-val { font-size: 30px; font-weight: 800; letter-spacing: -1.5px; font-family: var(--mono); }
+  .stat-val small { font-size: 15px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+  .stat-label { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .filter-row { display: flex; gap: 7px; margin: 4px 0 14px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .filter-pill { padding: 8px 15px; border-radius: 20px; background: var(--surface); border: 1px solid var(--border2); color: var(--muted); font-size: 12.5px; cursor: pointer; white-space: nowrap; font-weight: 600; transition: all 0.15s; flex-shrink: 0; }
+  .filter-pill.active { background: var(--violet); border-color: var(--violet); color: #1a1030; }
+  .best-card { background: var(--surface); border-radius: var(--radius); padding: 20px; margin-bottom: 12px; border: 1px solid var(--border); }
+  .best-dir { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 14px; font-weight: 600; }
+  .best-headline { display: flex; align-items: baseline; gap: 8px; }
+  .best-time { font-size: 32px; font-weight: 800; color: var(--teal); letter-spacing: -1.5px; font-family: var(--mono); }
+  .best-time span { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 2px; font-family: var(--font); }
+  .best-detail { font-size: 13.5px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+  .best-detail strong { color: var(--text); font-weight: 650; }
+  .chart-bar-wrap { margin-top: 14px; }
+  .chart-bar-label { font-size: 12px; color: var(--muted); margin-bottom: 5px; display: flex; justify-content: space-between; gap: 10px; }
+  .chart-bar-label .route-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chart-bar-label .val { flex-shrink: 0; font-family: var(--mono); font-weight: 600; }
+  .chart-bar-track { background: var(--surface2); border-radius: 5px; height: 9px; overflow: hidden; position: relative; }
+  .chart-bar-fill { height: 100%; border-radius: 5px; background: var(--muted2); transition: width 0.7s cubic-bezier(0.4,0,0.2,1); }
+  .chart-bar-fill.best { background: linear-gradient(90deg, var(--teal), #5eead4); }
+  .chart-range { font-size: 11px; color: var(--muted2); margin-top: 4px; font-family: var(--mono); }
+  .no-data { text-align: center; padding: 44px 22px; color: var(--muted); font-size: 14px; background: var(--surface); border-radius: var(--radius); line-height: 1.6; }
+  .settings-item { background: var(--surface); border-radius: 14px; padding: 17px; margin-bottom: 10px; border: 1px solid var(--border); }
+  .settings-item label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 9px; text-transform: uppercase; letter-spacing: 0.7px; font-weight: 600; }
+  .settings-input { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 9px; padding: 11px 14px; color: var(--text); font-size: 14px; font-family: var(--font); }
+  .settings-input:focus { outline: none; border-color: var(--accent); }
+  .save-btn { background: var(--accent); color: #fff; border: none; border-radius: 11px; padding: 13px; width: 100%; font-size: 15px; font-weight: 650; cursor: pointer; margin-top: 4px; font-family: var(--font); transition: transform 0.12s; }
+  .save-btn:active { transform: scale(0.98); }
+  .btn-ghost { background: var(--surface2); color: var(--text); }
+  .btn-ghost.danger { color: var(--accent); }
+  .settings-info { font-size: 13px; color: var(--muted); line-height: 1.65; }
+  .settings-info strong { color: var(--text); }
+  .info-step { display: flex; gap: 10px; margin-bottom: 8px; }
+  .info-step .num { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="header-title">Commute <span>Tracker</span></div>
+    <div class="header-status"><span class="status-dot" id="statusDot"></span><span id="headerStatus">Sin conectar</span></div>
+  </div>
+  <div class="content">
+    <div id="screen-timer" class="screen active">
+      <div id="smartBanner"></div>
+      <div class="config-card">
+        <div class="config-label">Destino</div>
+        <div class="dest-chips" id="destChips"></div>
+        <div class="toggle-group" style="margin-top:12px">
+          <button class="toggle-btn active" id="dir-to" onclick="setWay('ida')">Ida →</button>
+          <button class="toggle-btn" id="dir-from" onclick="setWay('vuelta')">← Vuelta</button>
+        </div>
+      </div>
+      <div class="config-card">
+        <div class="config-label">Ruta</div>
+        <input class="route-input" id="routeInput" type="text" placeholder="Ej: Kennedy, Vespucio, Costanera..." autocomplete="off">
+        <div class="route-chips" id="routeChips"></div>
+      </div>
+      <div class="timer-display">
+        <div class="timer-time" id="timerDisplay">00:00</div>
+        <div class="timer-meta" id="timerMeta">Listo para salir</div>
+        <div class="timer-live" id="timerLive"><span class="live-dot"></span>Corriendo en segundo plano — puedes bloquear el celular</div>
+      </div>
+      <button class="start-btn idle" id="startBtn" onclick="toggleTimer()">Salir ahora</button>
+    </div>
+    <div id="screen-history" class="screen"><div id="tripsList"></div></div>
+    <div id="screen-dashboard" class="screen"><div id="dashContent"></div></div>
+    <div id="screen-settings" class="screen">
+      <div class="section-title">Conexión con Google Sheets</div>
+      <div class="settings-item">
+        <label>URL del Apps Script</label>
+        <input class="settings-input" id="scriptUrl" type="url" placeholder="https://script.google.com/macros/s/...">
+        <button class="save-btn" style="margin-top:12px" onclick="saveSettings()">Guardar conexión</button>
+      </div>
+      <div class="section-title">Respaldo</div>
+      <div class="settings-item">
+        <div class="settings-info" style="margin-bottom:12px">Descarga todo tu historial como archivo, por si cambias de teléfono.</div>
+        <button class="save-btn btn-ghost" onclick="exportData()">Descargar respaldo (.json)</button>
+        <button class="save-btn btn-ghost" style="margin-top:8px" onclick="document.getElementById('importFile').click()">Restaurar respaldo</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+      </div>
+      <div class="section-title">Datos</div>
+      <div class="settings-item">
+        <label>Rutas guardadas</label>
+        <div id="savedRoutesList" class="settings-info">Ninguna aún</div>
+        <button class="save-btn btn-ghost danger" style="margin-top:12px" onclick="clearRoutes()">Borrar rutas guardadas</button>
+      </div>
+      <div class="section-title">Cómo funciona</div>
+      <div class="settings-item">
+        <div class="settings-info">
+          <div class="info-step"><span class="num">1</span><span>Elige <strong>ida o vuelta</strong> y escribe la ruta antes de salir.</span></div>
+          <div class="info-step"><span class="num">2</span><span>Toca <strong>Salir ahora</strong> al partir. Bloquea el celular y usa Waze/Spotify sin problema — el tiempo se mide igual.</span></div>
+          <div class="info-step"><span class="num">3</span><span>Al llegar, abre la app y toca <strong>Llegué</strong>.</span></div>
+          <div class="info-step"><span class="num">4</span><span>Con suficientes viajes, <strong>Análisis</strong> te dice el mejor horario y ruta.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav class="nav">
+    <button class="nav-btn active" data-screen="timer" onclick="showScreen('timer', this)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>Viaje</button>
+    <button class="nav-btn" data-screen="history" onclick="showScreen('history', this)">
+      <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>Historial</button>
+    <button class="nav-btn" data-screen="dashboard" onclick="showScreen('dashboard', this)">
+      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Análisis</button>
+    <button class="nav-btn" data-screen="settings" onclick="showScreen('settings', this)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ajustes</button>
+  </nav>
+</div>
+<div class="modal-overlay" id="destModal">
+  <div class="modal">
+    <h3>Nuevo destino</h3>
+    <p>Dale un nombre corto. Se crearán automáticamente la ida y la vuelta.</p>
+    <input class="route-input" id="newDestInput" type="text" placeholder="Ej: Casa Ñaña, Gimnasio, Mall..." autocomplete="off">
+    <div class="modal-actions">
+      <button class="modal-btn ghost" onclick="closeDestModal()">Cancelar</button>
+      <button class="modal-btn primary" onclick="addDest()">Crear</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const DIAS_SHORT = ['dom','lun','mar','mié','jue','vie','sáb'];
+let state = {
+  destinations: JSON.parse(localStorage.getItem('destinations') || '["Trabajo"]'),
+  currentDest: localStorage.getItem('currentDest') || 'Trabajo',
+  way: 'ida',
+  scriptUrl: localStorage.getItem('scriptUrl') || '',
+  trips: JSON.parse(localStorage.getItem('trips') || '[]'),
+  routes: JSON.parse(localStorage.getItem('savedRoutes') || '[]'),
+  active: JSON.parse(localStorage.getItem('activeTrip') || 'null'),
+  dashFilter: 'todos'
+};
+// Migración: si el destino actual ya no existe, usar el primero
+if (!state.destinations.includes(state.currentDest)) state.currentDest = state.destinations[0] || 'Trabajo';
+// Construye la etiqueta de dirección a partir de destino + sentido
+function dirLabel(dest, way) { return way === 'ida' ? `Ida → ${dest}` : `Vuelta ← ${dest}`; }
+function currentDirection() { return dirLabel(state.currentDest, state.way); }
+let tickInterval = null;
+window.addEventListener('load', () => {
+  if (state.scriptUrl) {
+    document.getElementById('headerStatus').textContent = 'Conectado';
+    document.getElementById('statusDot').classList.add('ok');
+    document.getElementById('scriptUrl').value = state.scriptUrl;
+  }
+  if (state.active) resumeTrip();
+  renderDestChips(); renderRouteChips(); renderSavedRoutes(); renderSmartBanner();
+});
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && state.active) updateTimerDisplay();
+});
+function renderDestChips() {
+  const c = document.getElementById('destChips');
+  let html = state.destinations.map(d => {
+    const active = d === state.currentDest;
+    const canDelete = state.destinations.length > 1;
+    return `<div class="dest-chip ${active?'active':''}" onclick="setDest('${esc(d)}')">${d}${active && canDelete ? `<span class="dest-del" onclick="event.stopPropagation();removeDest('${esc(d)}')">×</span>`:''}</div>`;
+  }).join('');
+  html += `<div class="dest-chip add" onclick="openDestModal()">+ Agregar</div>`;
+  c.innerHTML = html;
+}
+function setDest(d) { state.currentDest = d; localStorage.setItem('currentDest', d); renderDestChips(); renderSmartBanner(); }
+function setWay(w) {
+  state.way = w;
+  document.getElementById('dir-to').classList.toggle('active', w === 'ida');
+  document.getElementById('dir-from').classList.toggle('active', w === 'vuelta');
+  renderSmartBanner();
+}
+function openDestModal() { document.getElementById('destModal').classList.add('show'); setTimeout(()=>document.getElementById('newDestInput').focus(),100); }
+function closeDestModal() { document.getElementById('destModal').classList.remove('show'); document.getElementById('newDestInput').value=''; }
+function addDest() {
+  const name = document.getElementById('newDestInput').value.trim();
+  if (!name) { showToast('Escribe un nombre','error'); return; }
+  if (state.destinations.includes(name)) { showToast('Ese destino ya existe','error'); setDest(name); closeDestModal(); return; }
+  state.destinations.push(name);
+  localStorage.setItem('destinations', JSON.stringify(state.destinations));
+  setDest(name); closeDestModal(); showToast(`Destino "${name}" creado`,'success');
+}
+function removeDest(d) {
+  if (!confirm(`¿Quitar el destino "${d}"? Tus viajes ya registrados se conservan.`)) return;
+  state.destinations = state.destinations.filter(x => x !== d);
+  localStorage.setItem('destinations', JSON.stringify(state.destinations));
+  if (state.currentDest === d) { state.currentDest = state.destinations[0]; localStorage.setItem('currentDest', state.currentDest); }
+  renderDestChips(); renderSmartBanner(); showToast('Destino quitado','success');
+}
+function toggleTimer() { if (!state.active) startTrip(); else stopTrip(); }
+function startTrip() {
+  const route = document.getElementById('routeInput').value.trim() || 'Sin nombre';
+  state.active = { direction: currentDirection(), dest: state.currentDest, way: state.way, route, startTime: Date.now() };
+  localStorage.setItem('activeTrip', JSON.stringify(state.active));
+  if (route !== 'Sin nombre' && !state.routes.includes(route)) {
+    state.routes.push(route);
+    if (state.routes.length > 12) state.routes.shift();
+    localStorage.setItem('savedRoutes', JSON.stringify(state.routes));
+    renderRouteChips();
+  }
+  enterRunningUI();
+}
+function resumeTrip() { enterRunningUI(); showToast('Viaje en curso reanudado', 'success'); }
+function enterRunningUI() {
+  const btn = document.getElementById('startBtn');
+  btn.textContent = 'Llegué'; btn.className = 'start-btn running';
+  document.getElementById('timerLive').classList.add('show');
+  const t = new Date(state.active.startTime);
+  document.getElementById('timerMeta').textContent =
+    `Salida ${t.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})} · ${state.active.route} · ${state.active.direction}`;
+  updateTimerDisplay();
+  tickInterval = setInterval(updateTimerDisplay, 1000);
+}
+function stopTrip() {
+  clearInterval(tickInterval);
+  const endTime = Date.now();
+  const durationMs = endTime - state.active.startTime;
+  const trip = { id: 'T' + state.active.startTime, direction: state.active.direction, route: state.active.route,
+    startTime: state.active.startTime, endTime, durationMs, excluded: false };
+  state.trips.unshift(trip);
+  localStorage.setItem('trips', JSON.stringify(state.trips.slice(0, 500)));
+  state.active = null; localStorage.removeItem('activeTrip');
+  const btn = document.getElementById('startBtn');
+  btn.textContent = 'Salir ahora'; btn.className = 'start-btn idle';
+  document.getElementById('timerDisplay').textContent = '00:00';
+  document.getElementById('timerDisplay').className = 'timer-time';
+  document.getElementById('timerLive').classList.remove('show');
+  document.getElementById('timerMeta').textContent = `Viaje guardado: ${fmtDur(durationMs)} 🎉`;
+  saveToSheets(trip); renderSmartBanner();
+}
+function updateTimerDisplay() {
+  if (!state.active) return;
+  const ms = Date.now() - state.active.startTime;
+  const el = document.getElementById('timerDisplay');
+  el.textContent = fmtDur(ms); el.className = 'timer-time running';
+}
+function fmtDur(ms) {
+  const s = Math.floor(ms / 1000); const m = Math.floor(s / 60), h = Math.floor(m / 60);
+  if (h > 0) return `${h}:${String(m%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+}
+function renderRouteChips() {
+  const c = document.getElementById('routeChips');
+  if (!state.routes.length) { c.innerHTML = ''; return; }
+  c.innerHTML = state.routes.slice(-6).reverse().map(r => `<div class="route-chip saved" onclick="selectRoute('${esc(r)}')">${r}</div>`).join('');
+}
+function selectRoute(r) { document.getElementById('routeInput').value = r; }
+function esc(s) { return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+function renderSavedRoutes() {
+  const el = document.getElementById('savedRoutesList');
+  el.innerHTML = state.routes.length ? state.routes.map(r => `• ${r}`).join('<br>') : 'Ninguna aún';
+}
+function renderSmartBanner() {
+  const el = document.getElementById('smartBanner');
+  const valid = state.trips.filter(t => !t.excluded);
+  if (valid.length < 5) { el.innerHTML = ''; return; }
+  // Banner para el destino y sentido actualmente seleccionados
+  const targetDir = currentDirection();
+  const buckets = buildBuckets(valid.filter(t => t.direction === targetDir), 'todos');
+  const valid2 = buckets.filter(b => b.n >= 2).sort((a,b) => a.avg - b.avg);
+  if (!valid2.length) { el.innerHTML = ''; return; }
+  const best = valid2[0];
+  const label = state.way === 'ida' ? `a ${state.currentDest}` : `de vuelta desde ${state.currentDest}`;
+  el.innerHTML = `<div class="icon">⚡</div><div class="txt">Para ir <strong>${label}</strong>, lo más rápido es salir cerca de las <strong>${best.block}</strong> por <strong>${best.route}</strong>.<div class="sub">~${best.avg} min en promedio · ${best.n} viajes registrados</div></div>`;
+}
+function renderHistory() {
+  const el = document.getElementById('tripsList');
+  const trips = state.trips;
+  if (!trips.length) {
+    el.innerHTML = `<div class="empty-state"><div class="big">🚗</div>Aún no registras viajes.<br>Toca "Salir ahora" para empezar.</div>`;
+    return;
+  }
+  const valid = trips.filter(t => !t.excluded);
+  const n = valid.length, minN = 20;
+  const outlierIds = detectOutliers(valid);
+  let html = '';
+  if (n < minN) {
+    html += `<div class="n-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span>${n} de ${minN} viajes para un análisis confiable. Sigue registrando.</span></div>`;
+  }
+  html += '<div class="section-title">Viajes recientes</div>';
+  html += trips.slice(0, 80).map(t => {
+    const dur = t.durationMs / 60000;
+    const emoji = (t.way === 'ida' || (t.direction||'').startsWith('Ida')) ? '→' : '←';
+    const d = new Date(t.startTime);
+    const dateStr = `${DIAS_SHORT[d.getDay()]} ${d.getDate()}`;
+    const timeStr = d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+    const isOut = outlierIds.has(t.id); const isExcl = t.excluded;
+    return `<div class="trip-card ${isOut && !isExcl ? 'outlier' : ''}" id="trip-${t.id}" style="${isExcl ? 'opacity:0.45' : ''}">
+      <div class="trip-arrow">${emoji}</div>
+      <div class="trip-info">
+        <div class="trip-route">${t.route}</div>
+        <div class="trip-meta"><span>${dateStr} · ${timeStr}</span>${isOut && !isExcl ? '<span class="trip-flag">anómalo</span>' : ''}${isExcl ? '<span class="trip-flag" style="background:rgba(125,138,154,0.2);color:var(--muted)">excluido</span>' : ''}</div>
+        ${(isOut || isExcl) ? `<div style="margin-top:6px"><button onclick="toggleExclude('${t.id}')" style="background:none;border:1px solid var(--border2);border-radius:7px;padding:4px 10px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer">${isExcl ? '↺ Volver a incluir' : '✕ Excluir del análisis'}</button></div>` : ''}
+      </div>
+      <div class="trip-dur">${Math.floor(dur)}<span>m ${Math.round((dur%1)*60)}s</span></div>
+      <button class="trip-del" onclick="deleteTrip('${t.id}')"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+    </div>`;
+  }).join('');
+  el.innerHTML = html;
+}
+function detectOutliers(trips) {
+  const ids = new Set();
+  const dirs = [...new Set(trips.map(t => t.direction))];
+  dirs.forEach(dir => {
+    const grp = trips.filter(t => t.direction === dir).map(t => t.durationMs/60000);
+    if (grp.length < 4) return;
+    const mean = grp.reduce((a,b)=>a+b,0)/grp.length;
+    const sd = Math.sqrt(grp.reduce((a,b)=>a+(b-mean)**2,0)/grp.length);
+    trips.filter(t => t.direction === dir).forEach(t => { if (t.durationMs/60000 > mean + 1.5*sd) ids.add(t.id); });
+  });
+  return ids;
+}
+function toggleExclude(id) {
+  const t = state.trips.find(x => x.id === id);
+  if (t) { t.excluded = !t.excluded; localStorage.setItem('trips', JSON.stringify(state.trips)); renderHistory(); renderSmartBanner(); showToast(t.excluded ? 'Excluido del análisis' : 'Incluido de nuevo','success'); }
+}
+function deleteTrip(id) {
+  const el = document.getElementById('trip-'+id);
+  state.trips = state.trips.filter(t => t.id !== id);
+  localStorage.setItem('trips', JSON.stringify(state.trips));
+  if (el) { el.style.opacity='0'; el.style.transform='translateX(-20px)'; setTimeout(()=>{renderHistory();renderSmartBanner();},250); }
+  showToast('Viaje eliminado','success');
+}
+function buildBuckets(trips, dayFilter) {
+  const buckets = {};
+  trips.forEach(t => {
+    const d = new Date(t.startTime);
+    if (dayFilter === 'semana' && (d.getDay()===0||d.getDay()===6)) return;
+    if (dayFilter === 'finde' && d.getDay()!==0 && d.getDay()!==6) return;
+    const h=d.getHours(), m=d.getMinutes();
+    const block=`${String(h).padStart(2,'0')}:${m<15?'00':m<30?'15':m<45?'30':'45'}`;
+    const key=`${block}|${t.route}`;
+    if(!buckets[key]) buckets[key]={vals:[],block,route:t.route};
+    buckets[key].vals.push(t.durationMs/60000);
+  });
+  return Object.values(buckets).map(b => {
+    const avg = b.vals.reduce((a,c)=>a+c,0)/b.vals.length;
+    return { block:b.block, route:b.route, avg:Math.round(avg*10)/10, min:Math.round(Math.min(...b.vals)*10)/10, max:Math.round(Math.max(...b.vals)*10)/10, n:b.vals.length };
+  });
+}
+function renderDashboard() {
+  const el = document.getElementById('dashContent');
+  const valid = state.trips.filter(t => !t.excluded);
+  if (!valid.length) {
+    el.innerHTML = `<div class="no-data">📊 Aún no hay datos.<br><br>Registra tus viajes y aquí aparecerá el análisis con tu mejor horario y ruta.</div>`;
+    return;
+  }
+  const durs = valid.map(t=>t.durationMs/60000);
+  const total = valid.length;
+  const avgAll = durs.reduce((a,b)=>a+b,0)/total;
+  const minAll = Math.min(...durs), maxAll = Math.max(...durs);
+  let html = `<div class="stats-grid">
+      <div class="stat-card"><div class="stat-val">${total}</div><div class="stat-label">Viajes válidos</div></div>
+      <div class="stat-card"><div class="stat-val">${Math.round(avgAll)}<small> min</small></div><div class="stat-label">Promedio general</div></div>
+      <div class="stat-card"><div class="stat-val" style="color:var(--teal)">${Math.round(minAll)}<small> min</small></div><div class="stat-label">Más rápido</div></div>
+      <div class="stat-card"><div class="stat-val" style="color:var(--amber)">${Math.round(maxAll)}<small> min</small></div><div class="stat-label">Más lento</div></div>
+    </div>`;
+  html += `<div class="filter-row">
+    <div class="filter-pill ${state.dashFilter==='todos'?'active':''}" onclick="setDashFilter('todos')">Todos los días</div>
+    <div class="filter-pill ${state.dashFilter==='semana'?'active':''}" onclick="setDashFilter('semana')">Solo semana</div>
+    <div class="filter-pill ${state.dashFilter==='finde'?'active':''}" onclick="setDashFilter('finde')">Fin de semana</div>
+  </div>`;
+  let any = false;
+  const dirs = [...new Set(valid.map(t => t.direction))].sort();
+  dirs.forEach(dir => {
+    const buckets = buildBuckets(valid.filter(t=>t.direction===dir), state.dashFilter);
+    const withN = buckets.filter(b=>b.n>=2).sort((a,b)=>a.avg-b.avg);
+    if (!withN.length) return;
+    any = true;
+    const best = withN[0];
+    const worstVal = Math.max(...withN.map(b=>b.avg));
+    const saving = Math.round(worstVal - best.avg);
+    html += `<div class="best-card">
+      <div class="best-dir">${dir}</div>
+      <div class="best-headline"><div class="best-time">${best.avg}<span>min</span></div></div>
+      <div class="best-detail">Sal a las <strong>${best.block}</strong> por <strong>${best.route}</strong>${saving>0?` y ahorras hasta <strong>${saving} min</strong> vs tu peor opción`:''}.</div>`;
+    withN.slice(0,7).forEach((b,i)=>{
+      const pct = Math.round((b.avg/worstVal)*100);
+      html += `<div class="chart-bar-wrap">
+        <div class="chart-bar-label"><span class="route-name">${b.block} · ${b.route}</span><span class="val" style="color:${i===0?'var(--teal)':'var(--muted)'}">${b.avg}m</span></div>
+        <div class="chart-bar-track"><div class="chart-bar-fill ${i===0?'best':''}" style="width:${pct}%"></div></div>
+        <div class="chart-range">rango ${b.min}–${b.max}m · ${b.n} viaje${b.n>1?'s':''}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  if (!any) html += `<div class="no-data">Necesitas al menos 2 viajes en un mismo horario y ruta para comparar. Vas en camino.</div>`;
+  el.innerHTML = html;
+}
+function setDashFilter(f) { state.dashFilter = f; renderDashboard(); }
+async function saveToSheets(trip) {
+  if (!state.scriptUrl) return;
+  try {
+    await fetch(state.scriptUrl, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'save_trip', trip }) });
+    showToast('Guardado en Google Sheets','success');
+  } catch(e) { showToast('Guardado solo local','error'); }
+}
+function exportData() {
+  const data = { trips: state.trips, routes: state.routes, exported: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `commute-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('Respaldo descargado','success');
+}
+function importData(ev) {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.trips) { state.trips = data.trips; localStorage.setItem('trips', JSON.stringify(state.trips)); }
+      if (data.routes) { state.routes = data.routes; localStorage.setItem('savedRoutes', JSON.stringify(state.routes)); }
+      renderSavedRoutes(); renderRouteChips(); renderSmartBanner();
+      showToast('Respaldo restaurado','success');
+    } catch(err) { showToast('Archivo inválido','error'); }
+  };
+  reader.readAsText(file);
+}
+function showScreen(name, btn) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  btn.classList.add('active');
+  if (name==='history') renderHistory();
+  if (name==='dashboard') renderDashboard();
+  if (name==='timer') renderSmartBanner();
+  if (name==='settings') renderSavedRoutes();
+}
+function saveSettings() {
+  const url = document.getElementById('scriptUrl').value.trim();
+  if (!url || !url.startsWith('https://script.google.com')) { showToast('URL inválida','error'); return; }
+  state.scriptUrl = url; localStorage.setItem('scriptUrl', url);
+  document.getElementById('headerStatus').textContent = 'Conectado';
+  document.getElementById('statusDot').classList.add('ok');
+  showToast('Conexión guardada','success');
+}
+function clearRoutes() {
+  if (!confirm('¿Borrar todas las rutas guardadas? No afecta tu historial de viajes.')) return;
+  state.routes = []; localStorage.setItem('savedRoutes','[]');
+  renderRouteChips(); renderSavedRoutes(); showToast('Rutas borradas','success');
+}
+let toastTimer;
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show '+type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{t.className='toast';}, 2600);
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+</script>
+</body>
+</html>
